@@ -19,7 +19,7 @@ void patient_function(BoundedBuffer* buffer, int patientNum, int requests)
     }
 }
 
-void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan)
+void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramCollection* hc)
 {
     /*
 		Functionality of the worker threads: pops off messages from bounded buffer and send them to server
@@ -35,7 +35,10 @@ void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan)
             {
                chan->cwrite(req, sizeof(datamsg));
                char* response = chan->cread();
-               // histogram
+               
+               // update histogram
+               datamsg* type = (datamsg*) req;
+               hc->update(type->person, *(double*) response);
 
             }
             break;
@@ -78,6 +81,13 @@ int main(int argc, char *argv[])
     vector<thread> patientThreads;
     vector<thread> workerThreads;
 
+    // create histograms and add to histo list
+    for(int i = 0; i < p; i++)
+    {
+        Histogram* hist = new Histogram(10,-2,2);
+        hc.add(hist);
+    }
+
     // populate threads
     for(int i = 0; i < p; i++)
     {
@@ -90,9 +100,8 @@ int main(int argc, char *argv[])
         chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
         char* response = chan->cread();
         FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
-        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan)));
+        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc)));
     }
-
 
 	/* Join all threads here */
     
