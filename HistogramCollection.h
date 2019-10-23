@@ -7,7 +7,6 @@ using namespace std;
 class HistogramCollection{
 private:
     vector<Histogram*> hists; //collection of histograms
-    mutex m;
 public:
     HistogramCollection (){
         hists.clear();
@@ -28,9 +27,7 @@ public:
 
     void update (int person_no, double ecg_value)
     {
-        m.lock();
         hists.at(person_no-1)->update(ecg_value);
-        m.unlock();
     }
     
     void print (){

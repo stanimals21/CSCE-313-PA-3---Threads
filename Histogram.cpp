@@ -12,6 +12,7 @@ Histogram::Histogram(int _nbins, double _start, double _end): nbins (_nbins), st
 Histogram::~Histogram(){
 }
 void Histogram::update (double value){
+	m.lock();
 	int bin_index = (int) ((value - start) / (end - start) * nbins);
 	if (bin_index <0)
 		bin_index= 0;
@@ -20,6 +21,7 @@ void Histogram::update (double value){
 
 	//cout << value << "-" << bin_index << endl;
 	hist [bin_index] ++;
+	m.unlock();
 }
 vector<int> Histogram::get_hist(){
 	return hist;

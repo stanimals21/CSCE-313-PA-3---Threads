@@ -189,7 +189,7 @@ int main(int argc, char *argv[])
     // ------------------------- part 2 -------------------
 
     // prepare request array to be sent to server for FileSize
-    string fileName = "256.dat";
+    string fileName = "1.csv";
 
     const char* fileString = fileName.c_str();
     char* requestArr = new char[sizeof(filemsg) + fileName.length() + 1];
