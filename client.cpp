@@ -89,7 +89,6 @@ void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramC
                 chan->cwrite(req, sizeof(filemsg) + fileName.length() + 1);
                 // cread the data
                 char* response = chan->cread();
-                cout << response << endl;
                 // lseek
                 lseek(fd, msg->offset, SEEK_SET);
                 // // write
@@ -110,7 +109,7 @@ int main(int argc, char *argv[])
 {
     int n = 10;    //default number of requests per "patient"
     int p = 10;     // number of patients [1,15]
-    int w = 100;    //default number of worker threads
+    int w = 500;    //default number of worker threads
     int b = 20; 	// default capacity of the request buffer, you should change this default
 	int m = MAX_MESSAGE; 	// default capacity of the file buffer
     srand(time_t(NULL));
@@ -134,109 +133,115 @@ int main(int argc, char *argv[])
 
     // ------------------------- part 1 ------------------------------- // change parameters
 
-    // // dummy fileName
-    // string fileName = "";
-    // // list of threads
-    // vector<thread> patientThreads;
-    // vector<thread> workerThreads;
+    if(true)
+    {
+        // dummy fileName
+        string fileName = "";
+        // list of threads
+        vector<thread> patientThreads;
+        vector<thread> workerThreads;
 
-    // // create histograms and add to histo list
-    // for(int i = 0; i < p; i++)
-    // {
-    //     Histogram* hist = new Histogram(p,-2,2);
-    //     hc.add(hist);
-    // }
+        // create histograms and add to histo list
+        for(int i = 0; i < p; i++)
+        {
+            Histogram* hist = new Histogram(p,-2,2);
+            hc.add(hist);
+        }
 
-    // // populate threads
-    // for(int i = 0; i < p; i++)
-    // {
-    //     patientThreads.push_back(move(thread(&patient_function,&request_buffer,i+1,n)));
-    // }
+        // populate threads
+        for(int i = 0; i < p; i++)
+        {
+            patientThreads.push_back(move(thread(&patient_function,&request_buffer,i+1,n)));
+        }
 
-    // for(int i=0; i < w; i++)
-    // {
-    //     MESSAGE_TYPE n = NEWCHANNEL_MSG;
-    //     chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
-    //     char* response = chan->cread();
-    //     FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
-    //     workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName)));
-    // }
+        for(int i=0; i < w; i++)
+        {
+            MESSAGE_TYPE n = NEWCHANNEL_MSG;
+            chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
+            char* response = chan->cread();
+            FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
+            workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName)));
+        }
 
-	// /* Join all threads here */
+        /* Join all threads here */
+
+        // join patient threads
+        for(int i = 0; i < p; i++)
+        {
+            patientThreads[i].join();
+        }
+
+        // send quit messages to buffer
+        for(int i = 0; i < w; i++)
+        {
+            //vector<char> quit;
+            MESSAGE_TYPE quit = QUIT_MSG;
+            char* quitMessage = (char*) &quit;
+            vector<char> quitReq = vector<char>(quitMessage, quitMessage+sizeof(QUIT_MSG));
+            request_buffer.push(quitReq); 
+        }
+
+        // join worker threads
+        for(int i=0; i < w; i++)
+        {
+            workerThreads[i].join();
+        }
+    }
     
-    // // join patient threads
-    // for(int i = 0; i < p; i++)
-    // {
-    //     patientThreads[i].join();
-    // }
-
-    // // send quit messages to buffer
-    // for(int i = 0; i < w; i++)
-    // {
-    //     //vector<char> quit;
-    //     MESSAGE_TYPE quit = QUIT_MSG;
-    //     char* quitMessage = (char*) &quit;
-    //     vector<char> quitReq = vector<char>(quitMessage, quitMessage+sizeof(QUIT_MSG));
-    //     request_buffer.push(quitReq); 
-    // }
-
-    // // join worker threads
-    // for(int i=0; i < w; i++)
-    // {
-    //     workerThreads[i].join();
-    // }
-
     // ------------------------- part 2 -------------------
 
-    // prepare request array to be sent to server for FileSize
-    string fileName = "1.csv";
-
-    const char* fileString = fileName.c_str();
-    char* requestArr = new char[sizeof(filemsg) + fileName.length() + 1];
-
-    filemsg* msg = new filemsg(0, 0);
-
-    memcpy(requestArr, msg, sizeof(filemsg));
-    strcpy(requestArr + sizeof(filemsg), fileString);
-
-    chan->cwrite(requestArr, sizeof(filemsg) + fileName.length() + 1);
-
-    char* resp = chan->cread();
-    __int64_t size = *(__int64_t*)resp;
-
-    // --------- create threads ----------
-
-    vector<thread> workerThreads;
-
-    // open file descriptor
-
-    thread patientThread = thread(&patient_function2, &request_buffer, size, fileString, m);
-
-    for(int i=0; i < w; i++)
+    if(false)
     {
-        MESSAGE_TYPE n = NEWCHANNEL_MSG;
-        chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
-        char* response = chan->cread();
-        FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
-        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName)));
-    }
+        // prepare request array to be sent to server for FileSize
+        string fileName = "1.csv";
 
-    // join threads
-    patientThread.join();
+        const char* fileString = fileName.c_str();
+        char* requestArr = new char[sizeof(filemsg) + fileName.length() + 1];
 
-    // send quit messages to buffer
-    for(int i = 0; i < w; i++)
-    {
-        //vector<char> quit;
-        MESSAGE_TYPE quit = QUIT_MSG;
-        char* quitMessage = (char*) &quit;
-        vector<char> quitReq = vector<char>(quitMessage, quitMessage+sizeof(QUIT_MSG));
-        request_buffer.push(quitReq); 
-    }
+        filemsg* msg = new filemsg(0, 0);
 
-    for(int i=0; i < w; i++)
-    {
-        workerThreads[i].join();
+        memcpy(requestArr, msg, sizeof(filemsg));
+        strcpy(requestArr + sizeof(filemsg), fileString);
+
+        chan->cwrite(requestArr, sizeof(filemsg) + fileName.length() + 1);
+
+        char* resp = chan->cread();
+        __int64_t size = *(__int64_t*)resp;
+
+        // --------- create threads ----------
+
+        vector<thread> workerThreads;
+
+        // open file descriptor
+
+        thread patientThread = thread(&patient_function2, &request_buffer, size, fileString, m);
+
+        for(int i=0; i < w; i++)
+        {
+            MESSAGE_TYPE n = NEWCHANNEL_MSG;
+            chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
+            char* response = chan->cread();
+            FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
+            workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName)));
+        }
+
+        // join threads
+        patientThread.join();
+
+        // send quit messages to buffer
+        for(int i = 0; i < w; i++)
+        {
+            //vector<char> quit;
+            MESSAGE_TYPE quit = QUIT_MSG;
+            char* quitMessage = (char*) &quit;
+            vector<char> quitReq = vector<char>(quitMessage, quitMessage+sizeof(QUIT_MSG));
+            request_buffer.push(quitReq); 
+        }
+
+        for(int i=0; i < w; i++)
+        {
+            workerThreads[i].join();
+        }
     }
 
 // ------------------------------
