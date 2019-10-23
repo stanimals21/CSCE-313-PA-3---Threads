@@ -6,7 +6,7 @@
 #include "FIFOreqchannel.h"
 using namespace std;
 
-
+// for requesting data points (part 1)
 void patient_function(BoundedBuffer* buffer, int patientNum, int requests)
 {
     /* What will the patient threads do? Pushes patient messages into bounded buffer*/ 
@@ -19,7 +19,41 @@ void patient_function(BoundedBuffer* buffer, int patientNum, int requests)
     }
 }
 
-void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramCollection* hc)
+// for file requests (part 2)
+
+void patient_function2(BoundedBuffer* buffer, __int64_t size, string fileName, int packet){
+    // push packet requests into bounded buffer
+    char requestArr[sizeof(filemsg) + fileName.length() + 1];
+    const char* fileString = fileName.c_str();
+    filemsg* msg;
+
+    int packetSize = packet;
+    int iters = size / packetSize;
+    int endCase = size % packetSize;
+    int i;
+
+    for(i = 0; i <= iters; i++)
+    {
+        if(size <= i*packetSize)
+        {
+            break;
+        }
+        if(size % packetSize !=0 && i == iters)
+        {
+            msg = new filemsg(i*packetSize, endCase);
+        }
+        else
+        {
+            msg = new filemsg(i*packetSize, packetSize);
+        }
+        memcpy(&requestArr, msg, sizeof(filemsg));
+        strcpy(requestArr + sizeof(filemsg), fileString);
+        vector<char> requestVec(requestArr, requestArr + sizeof(requestArr));
+        buffer->push(requestVec);
+    }
+}
+
+void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramCollection* hc, string fileName, int descriptor)
 {
     /*
 		Functionality of the worker threads: pops off messages from bounded buffer and send them to server
@@ -42,18 +76,32 @@ void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramC
 
             }
             break;
+            case FILE_MSG:
+            {
+                // cast char* back to file message* (to get offset and length you are trying to write)
+                filemsg* msg = (filemsg*) req; 
+                chan->cwrite(req, sizeof(filemsg) + fileName.length() + 1);
+                // cread the data
+                char* response = chan->cread();
+                cout << response << endl;
+                // lseek
+                lseek(descriptor, msg->offset, SEEK_SET);
+                // // write
+                write(descriptor, response ,msg->length);
+            }
+            break;
             case QUIT_MSG:
             {
                 chan->cwrite(req, sizeof(QUIT_MSG));
+                delete chan;
             }
             return;
         }
    }
-    
 }
 int main(int argc, char *argv[])
 {
-    int n = 100;    //default number of requests per "patient"
+    int n = 10;    //default number of requests per "patient"
     int p = 10;     // number of patients [1,15]
     int w = 100;    //default number of worker threads
     int b = 20; 	// default capacity of the request buffer, you should change this default
@@ -77,22 +125,86 @@ int main(int argc, char *argv[])
 
     /* Start all threads here */
 
-    // list of threads
-    vector<thread> patientThreads;
+    // ------------------------- part 1 ------------------------------- // change parameters
+
+    // // dummy fileName
+    // string fileName = "";
+    // // list of threads
+    // vector<thread> patientThreads;
+    // vector<thread> workerThreads;
+
+    // // create histograms and add to histo list
+    // for(int i = 0; i < p; i++)
+    // {
+    //     Histogram* hist = new Histogram(p,-2,2);
+    //     hc.add(hist);
+    // }
+
+    // // populate threads
+    // for(int i = 0; i < p; i++)
+    // {
+    //     patientThreads.push_back(move(thread(&patient_function,&request_buffer,i+1,n)));
+    // }
+
+    // for(int i=0; i < w; i++)
+    // {
+    //     MESSAGE_TYPE n = NEWCHANNEL_MSG;
+    //     chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
+    //     char* response = chan->cread();
+    //     FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
+    //     workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName)));
+    // }
+
+	// /* Join all threads here */
+    
+    // // join patient threads
+    // for(int i = 0; i < p; i++)
+    // {
+    //     patientThreads[i].join();
+    // }
+
+    // // send quit messages to buffer
+    // for(int i = 0; i < w; i++)
+    // {
+    //     //vector<char> quit;
+    //     MESSAGE_TYPE quit = QUIT_MSG;
+    //     char* quitMessage = (char*) &quit;
+    //     vector<char> quitReq = vector<char>(quitMessage, quitMessage+sizeof(QUIT_MSG));
+    //     request_buffer.push(quitReq); 
+    // }
+
+    // // join worker threads
+    // for(int i=0; i < w; i++)
+    // {
+    //     workerThreads[i].join();
+    // }
+
+    // ------------------------- part 2 -------------------
+
+    // prepare request array to be sent to server for FileSize
+    string fileName = "1.csv";
+
+    const char* fileString = fileName.c_str();
+    char* requestArr = new char[sizeof(filemsg) + fileName.length() + 1];
+
+    filemsg* msg = new filemsg(0, 0);
+
+    memcpy(requestArr, msg, sizeof(filemsg));
+    strcpy(requestArr + sizeof(filemsg), fileString);
+
+    chan->cwrite(requestArr, sizeof(filemsg) + fileName.length() + 1);
+
+    char* resp = chan->cread();
+    __int64_t size = *(__int64_t*)resp;
+
+    // --------- create threads ----------
+
     vector<thread> workerThreads;
 
-    // create histograms and add to histo list
-    for(int i = 0; i < p; i++)
-    {
-        Histogram* hist = new Histogram(10,-2,2);
-        hc.add(hist);
-    }
+    // open file descriptor
+    int fd = open(fileString, O_CREAT | O_WRONLY | ios::out | ios::binary, 0777);
 
-    // populate threads
-    for(int i = 0; i < p; i++)
-    {
-        patientThreads.push_back(move(thread(&patient_function,&request_buffer,i+1,n)));
-    }
+    thread patientThread = thread(&patient_function2, &request_buffer, size, fileString, m);
 
     for(int i=0; i < w; i++)
     {
@@ -100,16 +212,11 @@ int main(int argc, char *argv[])
         chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
         char* response = chan->cread();
         FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
-        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc)));
+        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName, fd)));
     }
 
-	/* Join all threads here */
-    
-    // join patient threads
-    for(int i = 0; i < p; i++)
-    {
-        patientThreads[i].join();
-    }
+    // join threads
+    patientThread.join();
 
     // send quit messages to buffer
     for(int i = 0; i < w; i++)
@@ -121,11 +228,14 @@ int main(int argc, char *argv[])
         request_buffer.push(quitReq); 
     }
 
-    // join worker threads
     for(int i=0; i < w; i++)
     {
         workerThreads[i].join();
     }
+    
+    close(fd);
+
+// ------------------------------
 
     gettimeofday (&end, 0);
 	hc.print ();

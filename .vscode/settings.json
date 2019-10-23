@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "condition_variable": "cpp"
+        "condition_variable": "cpp",
+        "thread": "cpp"
     }
 }
