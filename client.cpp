@@ -114,6 +114,47 @@ int main(int argc, char *argv[])
 	int m = MAX_MESSAGE; 	// default capacity of the file buffer
     srand(time_t(NULL));
     
+    string f = "";
+
+    int opt;
+    while((opt = getopt(argc, argv, "n:p:w:b:f:")) != -1)  
+    {  
+        switch(opt)
+        {
+            case 'n':
+                if(optarg){
+                    n = stoi(optarg);
+                    }
+                break;
+            case 'p':
+                if(optarg)
+                {
+                    p = stoi(optarg);
+                }
+                break;
+            case 'w':
+                if(optarg){
+                    w = stoi(optarg);
+                }
+                break;
+            case 'b':
+                if(optarg){
+                    b = stoi(optarg);
+                }
+                break;
+            case 'f':
+                if(optarg) {
+                    // check to see if file is in directory?? (fstream might handle it)
+                    if(optarg)
+                    {
+                        f = optarg;
+                    }
+                }
+                break;
+            default:
+                abort();
+        }
+    }
     
     int pid = fork();
     if (pid == 0){
@@ -133,7 +174,7 @@ int main(int argc, char *argv[])
 
     // ------------------------- part 1 ------------------------------- // change parameters
 
-    if(true)
+    if(f == "")
     {
         // dummy fileName
         string fileName = "";
@@ -190,10 +231,10 @@ int main(int argc, char *argv[])
     
     // ------------------------- part 2 -------------------
 
-    if(false)
+    if(f != "")
     {
         // prepare request array to be sent to server for FileSize
-        string fileName = "1.csv";
+        string fileName = f;
 
         const char* fileString = fileName.c_str();
         char* requestArr = new char[sizeof(filemsg) + fileName.length() + 1];
