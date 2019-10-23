@@ -22,6 +22,10 @@ void patient_function(BoundedBuffer* buffer, int patientNum, int requests)
 // for file requests (part 2)
 
 void patient_function2(BoundedBuffer* buffer, __int64_t size, string fileName, int packet){
+
+    int fd = open(("./received/x"+fileName).c_str(), O_CREAT | O_TRUNC | O_WRONLY | ios::out | ios::binary, 0777);
+    close(fd);
+
     // push packet requests into bounded buffer
     char requestArr[sizeof(filemsg) + fileName.length() + 1];
     const char* fileString = fileName.c_str();
@@ -53,11 +57,13 @@ void patient_function2(BoundedBuffer* buffer, __int64_t size, string fileName, i
     }
 }
 
-void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramCollection* hc, string fileName, int descriptor)
+void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramCollection* hc, string fileName)
 {
     /*
 		Functionality of the worker threads: pops off messages from bounded buffer and send them to server
     */
+   int fd = open(("./received/x"+fileName).c_str(), O_WRONLY | ios::out | ios::binary, 0777);
+
    while(true)
    {
         vector<char> poppedVec = buffer->pop();
@@ -85,9 +91,9 @@ void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramC
                 char* response = chan->cread();
                 cout << response << endl;
                 // lseek
-                lseek(descriptor, msg->offset, SEEK_SET);
+                lseek(fd, msg->offset, SEEK_SET);
                 // // write
-                write(descriptor, response ,msg->length);
+                write(fd, response ,msg->length);
             }
             break;
             case QUIT_MSG:
@@ -98,6 +104,7 @@ void worker_function(BoundedBuffer* buffer, FIFORequestChannel* chan, HistogramC
             return;
         }
    }
+   close(fd);
 }
 int main(int argc, char *argv[])
 {
@@ -182,7 +189,7 @@ int main(int argc, char *argv[])
     // ------------------------- part 2 -------------------
 
     // prepare request array to be sent to server for FileSize
-    string fileName = "1.csv";
+    string fileName = "256.dat";
 
     const char* fileString = fileName.c_str();
     char* requestArr = new char[sizeof(filemsg) + fileName.length() + 1];
@@ -202,7 +209,6 @@ int main(int argc, char *argv[])
     vector<thread> workerThreads;
 
     // open file descriptor
-    int fd = open(fileString, O_CREAT | O_WRONLY | ios::out | ios::binary, 0777);
 
     thread patientThread = thread(&patient_function2, &request_buffer, size, fileString, m);
 
@@ -212,7 +218,7 @@ int main(int argc, char *argv[])
         chan->cwrite ((char *) &n, sizeof (MESSAGE_TYPE));
         char* response = chan->cread();
         FIFORequestChannel* workerChan = new FIFORequestChannel(response, FIFORequestChannel::CLIENT_SIDE);
-        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName, fd)));
+        workerThreads.push_back(move(thread(&worker_function, &request_buffer, workerChan, &hc, fileName)));
     }
 
     // join threads
@@ -232,8 +238,6 @@ int main(int argc, char *argv[])
     {
         workerThreads[i].join();
     }
-    
-    close(fd);
 
 // ------------------------------
 
